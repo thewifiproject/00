@@ -1,7 +1,10 @@
 import socket
 import json
-import base64           from colorama import Fore, Style, init                                  # Initialize colorama
-init(autoreset=True)    
+import base64           
+from colorama import Fore, Style, init                                  # Initialize colorama
+
+init(autoreset=True)  
+
 # Server configuration
 HOST = "0.0.0.0"  # Replace with your server's IP address
 PORT = 4444  # Replace with your desired port
