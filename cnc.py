@@ -76,21 +76,21 @@ try:
         # Receive the output from the client
         output = client_socket.recv(4096).decode("utf-8")
         print(Fore.WHITE + output)
-        
-        if command[0] == "upload":
-    try:
-        _, filename, file_content = command
-        result = write_file(filename, file_content)
-        send_json(client_socket, result)
-    except Exception as e:
-        send_json(client_socket, f"[ERROR] {e}")
-elif command[0] == "download":
-    try:
-        _, filename = command
-        file_content = read_file(filename)
-        send_json(client_socket, file_content)
-    except Exception as e:
-        send_json(client_socket, f"[ERROR] {e}")
+
+        if command.startswith("upload"):
+            try:
+                _, filename, file_content = command.split(" ", 2)
+                result = write_file(filename, file_content)
+                send_json(client_socket, result)
+            except Exception as e:
+                send_json(client_socket, f"[ERROR] {e}")
+        elif command.startswith("download"):
+            try:
+                _, filename = command.split(" ", 1)
+                file_content = read_file(filename)
+                send_json(client_socket, file_content)
+            except Exception as e:
+                send_json(client_socket, f"[ERROR] {e}")
 
 except KeyboardInterrupt:
     print(Fore.RED + "\nShutting down the server.")
