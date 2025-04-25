@@ -7,7 +7,7 @@ from colorama import Fore, Style, init
 init(autoreset=True)
 
 # Server configuration
-HOST = "127.0.0.1"  # Replace with your server's IP address
+HOST = "0.0.0.0"  # Replace with your server's IP address
 PORT = 4444  # Replace with your desired port
 
 # Function to send JSON data
