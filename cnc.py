@@ -8,7 +8,7 @@ from colorama import Fore, Style, init
 init(autoreset=True)
 
 # Server configuration
-HOST = "127.0.0.1"  # Replace with your server's IP address
+HOST = "0.0.0.0"  # Replace with your server's IP address
 PORT = 4444  # Replace with your desired port
 
 # Helper functions for file transfer
@@ -42,7 +42,7 @@ def write_file(path, content):
             return "[SUCCESS] File downloaded successfully."
     except Exception as e:
         return f"[ERROR] Failed to write file: {e}"
-        
+
 # Print starting message
 print(Fore.GREEN + "Starting TCP Handler...")
 
@@ -84,6 +84,7 @@ try:
                 send_json(client_socket, result)
             except Exception as e:
                 send_json(client_socket, f"[ERROR] {e}")
+
         elif command.startswith("download"):
             try:
                 _, filename = command.split(" ", 1)
