@@ -1,0 +1,14 @@
+uploading:
+[*] uploading  : (path/to/source/file) -> (path\to\destination\file)
+[*] uploaded   : (path/to/source/file) -> (path\to\destination\file)
+else 
+[-] Error: Permission denied
+else 
+[-] Error: The system cannot find the file specified.
+downloading:
+[*] downloading: (path\to\source\file -> (path/to/destination/file)
+[*] downloaded: (path\to\source\file) -> (path/to/destination/file)
+else 
+[-] Error: Permission denied
+else 
+[-] Error: The system cannot find the file specified.
