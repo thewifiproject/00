@@ -1,3 +1,9 @@
+listening:
+[*] Started reverse TCP handler on (host):(port)
+
+when user conencted:
+[*] Sending stage ((number of bytes when sending) bytes)(i: Sending Stage: Shows the payload stage is being sent to the target.) to (client ip)
+[*] Meterpreter session (number of sessions) opened ((server ip):(server port) -> (client ip):(client port)) at (date time)
 uploading:
 [*] uploading  : (path/to/source/file) -> (path\to\destination\file)
 [*] uploaded   : (path/to/source/file) -> (path\to\destination\file)
