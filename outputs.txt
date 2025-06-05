@@ -527,7 +527,7 @@ The server does NOT participate in key generation for secret chats.
 It does NOT perform encryption or decryption.
 
 Its role is to deliver encrypted messages between users.
-
+Note hthe server isn't in GUI
 For regular (non-secret) chats, the server stores messages (encrypted or not), but for secret chats, it doesn’t store messages.
 
 3. What the Client Has and Does
