@@ -1,20 +1,560 @@
-listening:
-[*] Started reverse TCP handler on (host):(port)
+Create in Python 2 codes server.py and client.py a Chat app only peer-to-peer where  will be used two times for peer-to-peer key exhcnage etc. ) + the protocol that the two clients make a key exchane and key deriva when all this inilciazed with two clients (2 connections) can chat so add only 2 connections can connect if a 3rd connection redirect a a another room add if only 1 client connected print Waiting for peer... and add can enter a room  to connect to after connectedt o the rooma nd 2 clients connected add to the server broadcasting to both clients and add the aes-ige encryption note dont edit nothign else in the protocol only cleate the two codes where the protocol file will be imported
+ add to it encryption using a custom cryptographic protocol inspired by the Signal Protocol. The goal is to develop a reusable crypto library (not a simulation or messaging app). The library must implement secure primitives and high-level protocol logic in one file. No external protocol simulation or UI — just cryptographic logic.
 
-when user conencted:
-[*] Sending stage ((number of bytes when sending) bytes)(i: Sending Stage: Shows the payload stage is being sent to the target.) to (client ip)
-[*] Meterpreter session (number of sessions) opened ((server ip):(server port) -> (client ip):(client port)) at (date time)
-uploading:
-[*] uploading  : (path/to/source/file) -> (path\to\destination\file)
-[*] uploaded   : (path/to/source/file) -> (path\to\destination\file)
-else 
-[-] Error: Permission denied
-else 
-[-] Error: The system cannot find the file specified.
-downloading:
-[*] downloading: (path\to\source\file -> (path/to/destination/file)
-[*] downloaded: (path\to\source\file) -> (path/to/destination/file)
-else 
-[-] Error: Permission denied
-else 
-[-] Error: The system cannot find the file specified.
+❗ Requirements:
+- Only server.py and client.py
+- No chat simulation real
+-  UI
+
+🔐 Implement the following components manually:
+
+- AES-256-IGE 
+- RSA-2048                                                                                                                                                                         
+- DH-2048
+- HKDF (per RFC 5869)
+- HMAC-SHA256 (your own implementation using hashlib)
+
+
+🧠 Properties to support:
+- Confidentiality
+- Integrity
+- Authentication
+- Perfect Forward secrecy
+- Post-compromise security
+- Message unlinkability
+- Participation/message repudiation (deniability)
+
+🛠 Provide:
+- Classes/functions for key generation, session establishment, encryption/decryption
+- Comments explaining all steps
+- Usable API functions like `encrypt()`, `decrypt()`, `init_session()`, etc.
+
+❌ Do NOT:
+- Simulate a chat app
+- Include user interaction
+- Build a client/server
+- Add any non-crypto functionality note all must be a custom implemenntation Here is the detailed plan For your own implementation of AES-256 in IGE mode (Infinite Garble Extension), you need to implement several key components. Below is a brief list of what needs to be done:
+
+AES-256 Implementation
+
+Key length: 256 bits (32 bytes)
+
+Block size: 128 bits (16 bytes)
+
+Encryption and decryption of a single block
+If you don’t want to write your own AES from scratch, you can use a library (e.g., OpenSSL, Crypto++, Botan, etc.). If it should be your own implementation, you must implement all AES steps (key expansion, S-Box, ShiftRows, MixColumns, AddRoundKey, etc.).
+
+IGE Mode Implementation
+IGE is not a standard mode like ECB or CBC, so most libraries don’t have it built-in. You have to implement it yourself on top of the block cipher (AES).
+
+IGE encryption works according to this formula (all blocks are 16 bytes):
+Input:
+Plaintext: P₁, P₂, ..., Pₙ
+IV: two blocks IV₁, IV₂ (total 32 bytes)
+AES key: K
+
+For each block i:
+Cᵢ = AESₖ(Pᵢ ⊕ Cᵢ₋₁) ⊕ Pᵢ₋₁
+
+For i=1: C₀ = IV₁, P₀ = IV₂
+
+IGE decryption:
+Pᵢ = AESₖ⁻¹(Cᵢ ⊕ Pᵢ₋₁) ⊕ Cᵢ₋₁
+
+For i=1: C₀ = IV₁, P₀ = IV₂
+
+Padding
+IGE is not self-synchronizing; the input must be a multiple of the block size (16 bytes). If it isn’t, add padding (e.g., PKCS#7).
+
+Test Vectors
+Use public test vectors (for example from OpenSSL, Botan, or Telegram test vectors).
+
+Summary: What to add
+
+AES-256 block cipher (or use a library)
+
+IGE mode on top of the block cipher (implement according to formulas above)
+
+Correct handling of the IV (two blocks)
+
+Block padding
+
+Testing against known vectors This article describes the basic layer of the MTProto protocol version 2.0 (Cloud chats, server-client encryption). The principal differences from version 1.0 (described here for reference) are as follows:
+
+SHA-256 is used instead of SHA-1;
+Padding bytes are involved in the computation of msg_key;
+msg_key depends not only on the message to be encrypted, but on a portion of auth_key as well;
+12..1024 padding bytes are used instead of 0..15 padding bytes in v.1.0.
+See also: MTProto 2.0: Secret Chats, end-to-end encryption
+
+Protocol description
+Before a message (or a multipart message) is transmitted over a network using a transport protocol, it is encrypted in a certain way, and an external header is added at the top of the message that consists of a 64-bit key identifier auth_key_id (that uniquely identifies an authorization key for the server as well as the user) and a 128-bit message key msg_key.
+
+The authorization key auth_key combined with the message key msg_key define an actual 256-bit key aes_key and a 256-bit initialization vector aes_iv, which are used to encrypt the message using AES-256 encryption in infinite garble extension (IGE) mode. Note that the initial part of the message to be encrypted contains variable data (session, message ID, sequence number, server salt) that obviously influences the message key (and thus the AES key and iv). In MTProto 2.0, the message key is defined as the 128 middle bits of the SHA-256 of the message body (including session, message ID, padding, etc.) prepended by 32 bytes taken from the authorization key. In the older MTProto 1.0, the message key was computed as the lower 128 bits of SHA-1 of the message body, excluding the padding bytes.
+
+Multipart messages are encrypted as a single message.Each plaintext message to be encrypted in MTProto always contains the following data to be checked upon decryption in order to make the system robust against known problems with the components:
+
+server salt (64-Bit)
+session id
+message sequence number
+message length
+time
+Note 2
+Telegram's End-to-end encrypted Secret Chats are using an additional layer of encryption on top of the described above. See Secret Chats, End-to-End encryption for details.
+
+MTProto supports Perfect Forward Secrecy in both cloud chats and secret chats.
+
+Terminology
+Authorization Key (auth_key)
+A 2048-bit key shared by the client device and the server, created upon user registration directly on the client device by exchanging Diffie-Hellman keys, and never transmitted over a network. Each authorization key is user-specific. There is nothing that prevents a user from having several keys (that correspond to “permanent sessions” on different devices), and some of these may be locked forever in the event the device is lost. See also Creating an Authorization Key.
+
+Server Key
+A 2048-bit RSA key used by the server digitally to sign its own messages while registration is underway and the authorization key is being generated. The application has a built-in public server key which can be used to verify a signature but cannot be used to sign messages. A private server key is stored on the server and changed very infrequently.
+
+Key Identifier (auth_key_id)
+The 64 lower-order bits of the SHA1 hash of the authorization key are used to indicate which particular key was used to encrypt a message. Keys must be uniquely defined by the 64 lower-order bits of their SHA1, and in the event of a collision, an authorization key is regenerated. A zero key identifier means that encryption is not used which is permissible for a limited set of message types used during registration to generate an authorization key in a Diffie-Hellman exchange. For MTProto 2.0, SHA1 is still used here, because auth_key_id should identify the authorization key used independently of the protocol version.
+
+Session
+A (random) 64-bit number generated by the client to distinguish between individual sessions (for example, between different instances of the application, created with the same authorization key). The session in conjunction with the key identifier corresponds to an application instance. The server can maintain session state. Under no circumstances can a message meant for one session be sent into a different session. The server may unilaterally forget any client sessions; clients should be able to handle this.
+
+Server Salt
+A (random) 64-bit number changed every 30 minutes (separately for each session) at the request of the server. All subsequent messages must contain the new salt (although, messages with the old salt are still accepted for a further 1800 seconds). Required to protect against replay attacks and certain tricks associated with adjusting the client clock to a moment in the distant future.
+
+Message Identifier (msg_id)
+A (time-dependent) 64-bit number used uniquely to identify a message within a session. Client message identifiers are divisible by 4, server message identifiers modulo 4 yield 1 if the message is a response to a client message, and 3 otherwise. Client message identifiers must increase monotonically (within a single session), the same as server message identifiers, and must approximately equal unixtime*2^32. This way, a message identifier points to the approximate moment in time the message was created. A message is rejected over 300 seconds after it is created or 30 seconds before it is created (this is needed to protect from replay attacks). In this situation, it must be re-sent with a different identifier (or placed in a container with a higher identifier). The identifier of a message container must be strictly greater than those of its nested messages.
+
+Important: to counter replay-attacks the lower 32 bits of msg_id passed by the client must not be empty and must present a fractional part of the time point when the message was created.
+
+Message Sequence Number (msg_seqno)
+A 32-bit number equal to twice the number of content-related » messages created by the sender prior to this message and subsequently incremented by one if the current message is a content-related message.
+
+The seqno of a content-related message is thus msg.seqNo = (current_seqno*2)+1 (and after generating it, the local current_seqno counter must be incremented by 1), the seqno of a non-content related message is msg.seqNo = (current_seqno*2) (current_seqno must not be incremented by 1 after generation).
+
+Thus, the content-relatedness of an incoming MTProto message can simply be determined by checking the value of the least-significant bit of the seqno of the message (message.isContentRelated = (message.seqNo & 1) == 1).
+
+A container is always generated after its entire contents; therefore, its sequence number is greater than or equal to the sequence numbers of the messages contained in it.
+
+Content-related Message
+When receiving an MTProto message that is marked as content-related by setting the least-significant bit of the seqno, the receiving party must acknowledge it in some way.
+
+When the receiving party is the client, this must be done through msgs_ack constructors.
+
+When the receiving party is the server, this is usually done through msgs_ack constructors, but may also be done using the reply of a method, or an error, or some other way, as specified by the documentation of each method or constructor.
+
+When a TCP transport is used, the content-relatedness of constructors affects the server's behavior: the server will resend not-yet acknowledged content-related messages to a new connection if the current connection is closed and then re-opened.
+
+A client must always mark all API-level RPC queries as content-related, or else a bad_msg_notification with error_code=35 will be emitted.
+
+A client must never mark msgs_ack, msg_container, msg_copy, gzip_packed constructors (i.e. containers and acknowledgements) as content-related, or else a bad_msg_notification with error_code=34 will be emitted.
+
+A client may mark any other constructor except the four specified above as content-related, to improve reliability in case of network issues by requesting acknowledgements from the server.
+
+Message Key (msg_key)
+In MTProto 2.0, the middle 128 bits of the SHA-256 hash of the message to be encrypted (including the internal header and the padding bytes for MTProto 2.0), prepended by a 32-byte fragment of the authorization key.
+
+In MTProto 1.0, message key was defined differently, as the lower 128 bits of the SHA-1 hash of the message to be encrypted, with padding bytes excluded from the computation of the hash. Authorization key was not involved in this computation.
+
+Internal (cryptographic) Header
+A header (16 bytes) added before a message or a container before it is all encrypted together. Consists of the server salt (64 bits) and the session (64 bits).
+
+External (cryptographic) Header
+A header (24 bytes) added before an encrypted message or a container. Consists of the key identifier auth_key_id (64 bits) and the message key msg_key (128 bits).
+
+Payload
+External header + encrypted message or container.
+
+Defining AES Key and Initialization Vector
+The 2048-bit authorization key (auth_key) and the 128-bit message key (msg_key) are used to compute a 256-bit AES key (aes_key) and a 256-bit initialization vector (aes_iv) which are subsequently used to encrypt the part of the message to be encrypted (i. e. everything with the exception of the external header that is added later) with AES-256 in infinite garble extension (IGE) mode.
+
+For MTProto 2.0, the algorithm for computing aes_key and aes_iv from auth_key and msg_key is as follows.
+
+msg_key_large = SHA256 (substr (auth_key, 88+x, 32) + plaintext + random_padding);
+msg_key = substr (msg_key_large, 8, 16);
+sha256_a = SHA256 (msg_key + substr (auth_key, x, 36));
+sha256_b = SHA256 (substr (auth_key, 40+x, 36) + msg_key);
+aes_key = substr (sha256_a, 0, 8) + substr (sha256_b, 8, 16) + substr (sha256_a, 24, 8);
+aes_iv = substr (sha256_b, 0, 8) + substr (sha256_a, 8, 16) + substr (sha256_b, 24, 8);
+where x = 0 for messages from client to server and x = 8 for those from server to client.
+
+For the obsolete MTProto 1.0, msg_key, aes_key, and aes_iv were computed differently (see this document for reference).
+
+The lower-order 1024 bits of auth_key are not involved in the computation. They may (together with the remaining bits or separately) be used on the client device to encrypt the local copy of the data received from the server. The 512 lower-order bits of auth_key are not stored on the server; therefore, if the client device uses them to encrypt local data and the user loses the key or the password, data decryption of local data is impossible (even if data from the server could be obtained).
+
+In MTProto 1.0, when AES was used to encrypt a block of data of a length not divisible by 16 bytes, the data was padded with 0 to 15 random padding bytes random_padding to a length divisible by 16 bytes prior to encryption. In MTProto 2.0, this padding is taken into account when computing msg_key. Note that MTProto 2.0 requires from 12 to 1024 bytes of padding, still subject to the condition that the resulting message length be divisible by 16 bytes.
+
+Using MTProto 2.0 instead of MTProto 1.0
+A client may either use only MTProto 2.0 or only MTProto 1.0 in the same TCP connection. The server detects the protocol used by the first message received from the client, and then uses the same encryption for its messages, and expects the client to use the same encryption henceforth. We recommend using MTProto 2.0; MTProto 1.0 is deprecated and supported for backward compatibility only.
+
+Important Checks
+When an encrypted message is received, it must be checked that msg_key is in fact equal to the 128 middle bits of the SHA-256 of the decrypted data with a 32-byte fragment of auth_key prepended to it, and that msg_id has even parity for messages from client to server, and odd parity for messages from server to client.
+
+In addition, the identifiers (msg_id) of the last N messages received from the other side must be stored, and if a message comes in with msg_id lower than all or equal to any of the stored values, the message is to be ignored. Otherwise, the new message msg_id is added to the set, and, if the number of stored msg_id values is greater than N, the oldest (i. e. the lowest) is forgotten.
+
+On top of this, msg_id values that belong over 30 seconds in the future or over 300 seconds in the past are to be ignored. This is especially important for the server. The client would also find this useful (to protect from a replay attack), but only if it is certain of its time (for example, if its time has been synchronized with that of the server).
+
+Certain client-to-server service messages containing data sent by the client to the server (for example, msg_id of a recent client query) may, nonetheless, be processed on the client even if the time appears to be “incorrect”. This is especially true of messages to change server_salt and notifications of invalid client time. See Mobile Protocol: Service Messages.
+
+Storing an Authorization Key on a Client Device
+It may be suggested to users concerned with security that they password protect the authorization key in approximately the same way as in ssh. This can be accomplished by prepending the value of a cryptographic hash function, such as SHA-256, of the key to the front of the key, following which the entire string is encrypted using AES in CBC mode and a key equal to the user's (text) password. When the user inputs the password, the stored protected password is decrypted and verified by checking the SHA-256 value. From the user's standpoint, this is practically the same as using an application or a website password.
+
+Unencrypted Messages
+Special plain-text messages may be used to create an authorization key as well as to perform a time synchronization. They begin with auth_key_id = 0 (64 bits) which means that there is no auth_key. This is followed directly by the message body in serialized format without internal or external headers. A message identifier (64 bits) and body length in bytes (32 bytes) are added before the message body.
+
+Only a very limited number of messages of special types can be transmitted as plain text.
+
+Schematic Presentation of Messages
+Encrypted Message
+auth_key_id
+int64	msg_key
+int128	encrypted_data
+bytes
+Encrypted Message: encrypted_data
+Contains the cypher text for the following data:
+
+salt
+int64	session_id
+int64	message_id
+int64	seq_no
+int32	message_data_length
+int32	message_data
+bytes	padding12..1024
+bytes
+Unencrypted Message
+auth_key_id = 0
+int64	message_id
+int64	message_data_length
+int32	message_data
+bytes
+MTProto 2.0 uses 12..1024 padding bytes, instead of the 0..15 used in MTProto 1.0
+
+Creating an Authorization Key
+An authorization key is normally created once for every user during the application installation process immediately prior to registration. Registration itself, in actuality, occurs after the authorization key is created. However, a user may be prompted to complete the registration form while the authorization key is being generated in the background. Intervals between user key strokes may be used as a source of entropy in the generation of high-quality random numbers required for the creation of an authorization key.
+
+See Creating an Authorization Key.(﻿Creating an Authorization Key
+The query format is described using Binary Data Serialization and the TL Language. All large numbers are transmitted as strings containing the required sequence of bytes in big endian order. Hash functions, such as SHA1, return strings (of 20 bytes) which can also be interpreted as big endian numbers. Small numbers (int, long, int128, int256) are normally little endian; however, if they are part of SHA1, the bytes are not rearranged. This way, if long x is the 64 lower-order bits of SHA1 of string s, then the final 8 bytes of 20-byte string SHA1(s) are taken and interpreted as a 64-bit integer.
+
+Prior to sending off unencrypted messages (required in this instance to generate an authorization key), the client must undergo (p,q) authorization as follows.
+
+DH exchange initiation
+1) Client sends query to server
+req_pq_multi#be7e8ef1 nonce:int128 = ResPQ;
+The value of nonce is selected randomly by the client (random number) and identifies the client within this communication. Following this step, it is known to all.
+
+2) Server sends response of the form
+resPQ#05162463 nonce:int128 server_nonce:int128 pq:string server_public_key_fingerprints:Vector long = ResPQ;
+Here, string pq is a representation of a natural number (in binary big endian format). This number is the product of two different odd prime numbers. Normally, pq is less than or equal to 2^63-1. The value of server_nonce is selected randomly by the server; following this step, it is known to all.
+
+server_public_key_fingerprints is a list of public RSA key fingerprints (64 lower-order bits of SHA1 (server_public_key); the public key is represented as a bare type rsa_public_key n:string e:string = RSAPublicKey, where, as usual, n and e are numbers in big endian format serialized as strings of bytes, following which SHA1 is computed) received by the server.
+
+All subsequent messages contain the pair (nonce, server_nonce) both in the plain-text, and the encrypted portions which makes it possible to identify a “temporary session” — one run of the key generation protocol described on this page that uses the same (nonce, server_nonce) pair. An intruder could not create a parallel session with the server with the same parameters and reuse parts of server- or client-encrypted messages for its own purposes in such a parallel session, because a different server_nonce would be selected by the server for any new “temporary session”.
+
+Proof of work
+3) Client decomposes pq into prime factors such that p < q.
+This starts a round of Diffie-Hellman key exchanges.
+
+Presenting proof of work; Server authentication
+4) encrypted_data payload generation
+First of all, generate an encrypted_data payload as follows:
+
+new_nonce := another (good) random number generated by the client; after this query, it is known to both client and server;
+
+data := a serialization of
+
+p_q_inner_data_dc#a9f55f95 pq:string p:string q:string nonce:int128 server_nonce:int128 new_nonce:int256 dc:int = P_Q_inner_data;
+or of
+
+p_q_inner_data_temp_dc#56fddf88 pq:string p:string q:string nonce:int128 server_nonce:int128 new_nonce:int256 dc:int expires_in:int = P_Q_inner_data;
+where dc is the ID of the DC we're talking to; 10000 has to be added to the DC ID when connecting to the test servers; it has to be made negative if the DC we're connecting to is a media (not CDN) DC.
+
+encrypted_data := RSA_PAD (data, server_public_key), where RSA_PAD is a version of RSA with a variant of OAEP+ padding explained below in 4.1).
+
+Someone might intercept the query and replace it with their own, independently decomposing pq into factors instead of the client. The only field that it makes sense to modify is new_nonce which would be the one an intruder would have to re-generate (because an intruder cannot decrypt the encrypted data sent by the client). Since all subsequent messages are encrypted using new_nonce or contain new_nonce_hash, they will not be processed by the client (an intruder would not be able to make it look as though they had been generated by the server because they would not contain new_nonce). Therefore, this intercept will only result in the intruder's completing the authorization key generation protocol in place of the client and creating a new key (that has nothing to do with the client); however, the same effect could be achieved simply by creating a new key in one's own name.
+
+An alternative form of inner data (p_q_inner_data_temp_dc) is used to create temporary keys, that are only stored in the server RAM and are discarded after at most expires_in seconds. The server is free to discard its copy earlier. In all other respects the temporary key generation protocol is the same. After a temporary key is created, the client usually binds it to its principal authorisation key by means of the auth.bindTempAuthKey method, and uses it for all client-server communication until it expires; then a new temporary key is generated. Thus Perfect Forward Secrecy (PFS) in client-server communication is achieved. Read more about PFS »
+
+4.1) RSA_PAD(data, server_public_key) mentioned above is implemented as follows:
+data_with_padding := data + random_padding_bytes; -- where random_padding_bytes are chosen so that the resulting length of data_with_padding is precisely 192 bytes, and data is the TL-serialized data to be encrypted as before. One has to check that data is not longer than 144 bytes.
+data_pad_reversed := BYTE_REVERSE(data_with_padding); -- is obtained from data_with_padding by reversing the byte order.
+a random 32-byte temp_key is generated.
+data_with_hash := data_pad_reversed + SHA256(temp_key + data_with_padding); -- after this assignment, data_with_hash is exactly 224 bytes long.
+aes_encrypted := AES256_IGE(data_with_hash, temp_key, 0); -- AES256-IGE encryption with zero IV.
+temp_key_xor := temp_key XOR SHA256(aes_encrypted); -- adjusted key, 32 bytes
+key_aes_encrypted := temp_key_xor + aes_encrypted; -- exactly 256 bytes (2048 bits) long
+The value of key_aes_encrypted is compared with the RSA-modulus of server_pubkey as a big-endian 2048-bit (256-byte) unsigned integer. If key_aes_encrypted turns out to be greater than or equal to the RSA modulus, the previous steps starting from the generation of new random temp_key are repeated. Otherwise the final step is performed:
+encrypted_data := RSA(key_aes_encrypted, server_pubkey); -- 256-byte big-endian integer is elevated to the requisite power from the RSA public key modulo the RSA modulus, and the result is stored as a big-endian integer consisting of exactly 256 bytes (with leading zero bytes if required).
+5) Send req_DH_params query with generated encrypted_data
+req_DH_params#d712e4be nonce:int128 server_nonce:int128 p:string q:string public_key_fingerprint:long encrypted_data:string = Server_DH_Params
+6) Server responds with:
+server_DH_params_ok#d0e8075c nonce:int128 server_nonce:int128 encrypted_answer:string = Server_DH_Params;
+If the query is incorrect, the server returns a -404 error and the handshake must be restarted (any subsequent request also returns -404, even if it is correct).
+A -444 error may also be returned if a test DC ID is passed in p_q_inner_data_(_temp)dc when handshaking with a production DC, and vice versa.
+
+Here, encrypted_answer is obtained as follows:
+
+new_nonce_hash := 128 lower-order bits of SHA1 (new_nonce);
+answer := serialization
+server_DH_inner_data#b5890dba nonce:int128 server_nonce:int128 g:int dh_prime:string g_a:string server_time:int = Server_DH_inner_data;
+answer_with_hash := SHA1(answer) + answer + (0-15 random bytes); such that the length be divisible by 16;
+tmp_aes_key := SHA1(new_nonce + server_nonce) + substr (SHA1(server_nonce + new_nonce), 0, 12);
+tmp_aes_iv := substr (SHA1(server_nonce + new_nonce), 12, 8) + SHA1(new_nonce + new_nonce) + substr (new_nonce, 0, 4);
+encrypted_answer := AES256_ige_encrypt (answer_with_hash, tmp_aes_key, tmp_aes_iv); here, tmp_aes_key is a 256-bit key, and tmp_aes_iv is a 256-bit initialization vector. The same as in all the other instances that use AES encryption, the encrypted data is padded with random bytes to a length divisible by 16 immediately prior to encryption.
+Following this step, new_nonce is still known to client and server only. The client is certain that it is the server that responded and that the response was generated specifically in response to client query req_DH_params, since the response data are encrypted using new_nonce.
+
+Client is expected to check whether p = dh_prime is a safe 2048-bit prime (meaning that both p and (p-1)/2 are prime, and that 2^2047 < p < 2^2048), and that g generates a cyclic subgroup of prime order (p-1)/2, i.e. is a quadratic residue mod p. Since g is always equal to 2, 3, 4, 5, 6 or 7, this is easily done using quadratic reciprocity law, yielding a simple condition on p mod 4g -- namely, p mod 8 = 7 for g = 2; p mod 3 = 2 for g = 3; no extra condition for g = 4; p mod 5 = 1 or 4 for g = 5; p mod 24 = 19 or 23 for g = 6; and p mod 7 = 3, 5 or 6 for g = 7. After g and p have been checked by the client, it makes sense to cache the result, so as not to repeat lengthy computations in future.
+
+If the verification takes too long time (which is the case for older mobile devices), one might initially run only 15 Miller--Rabin iterations for verifying primeness of p and (p - 1)/2 with error probability not exceeding one billionth, and do more iterations later in the background.
+
+Another optimization is to embed into the client application code a small table with some known "good" couples (g,p) (or just known safe primes p, since the condition on g is easily verified during execution), checked during code generation phase, so as to avoid doing such verification during runtime altogether. Server changes these values rarely, thus one usually has to put the current value of server's dh_prime into such a table. For example, current value of dh_prime equals (in big-endian byte order)
+
+C7 1C AE B9 C6 B1 C9 04 8E 6C 52 2F 70 F1 3F 73 98 0D 40 23 8E 3E 21 C1 49 34 D0 37 56 3D 93 0F 48 19 8A 0A A7 C1 40 58 22 94 93 D2 25 30 F4 DB FA 33 6F 6E 0A C9 25 13 95 43 AE D4 4C CE 7C 37 20 FD 51 F6 94 58 70 5A C6 8C D4 FE 6B 6B 13 AB DC 97 46 51 29 69 32 84 54 F1 8F AF 8C 59 5F 64 24 77 FE 96 BB 2A 94 1D 5B CD 1D 4A C8 CC 49 88 07 08 FA 9B 37 8E 3C 4F 3A 90 60 BE E6 7C F9 A4 A4 A6 95 81 10 51 90 7E 16 27 53 B5 6B 0F 6B 41 0D BA 74 D8 A8 4B 2A 14 B3 14 4E 0E F1 28 47 54 FD 17 ED 95 0D 59 65 B4 B9 DD 46 58 2D B1 17 8D 16 9C 6B C4 65 B0 D6 FF 9C A3 92 8F EF 5B 9A E4 E4 18 FC 15 E8 3E BE A0 F8 7F A9 FF 5E ED 70 05 0D ED 28 49 F4 7B F9 59 D9 56 85 0C E9 29 85 1F 0D 81 15 F6 35 B1 05 EE 2E 4E 15 D0 4B 24 54 BF 6F 4F AD F0 34 B1 04 03 11 9C D8 E3 B9 2F CC 5B
+7) Client computes random 2048-bit number b (using a sufficient amount of entropy) and sends the server a message
+set_client_DH_params#f5045f1f nonce:int128 server_nonce:int128 encrypted_data:string = Set_client_DH_params_answer;
+Here, encrypted_data is obtained thus:
+
+g_b := pow(g, b) mod dh_prime;
+data := serialization
+client_DH_inner_data#6643b654 nonce:int128 server_nonce:int128 retry_id:long g_b:string = Client_DH_Inner_Data
+data_with_hash := SHA1(data) + data + (0-15 random bytes); such that length be divisible by 16;
+encrypted_data := AES256_ige_encrypt (data_with_hash, tmp_aes_key, tmp_aes_iv);
+The retry_id field is equal to zero at the time of the first attempt; otherwise, it is equal to auth_key_aux_hash from the previous failed attempt (see Item 9).
+
+8) Thereafter, auth_key equals pow(g, {ab}) mod dh_prime; on the server, it is computed as pow(g_b, a) mod dh_prime, and on the client as (g_a)^b mod dh_prime.
+Auth_key_hash is computed := 64 lower-order bits of SHA1 (auth_key). The server checks whether there already is another key with the same auth_key_hash and responds in one of the following ways.
+
+DH key exchange complete
+9) Server responds in one of three ways:
+dh_gen_ok#3bcbf734 nonce:int128 server_nonce:int128 new_nonce_hash1:int128 = Set_client_DH_params_answer;
+dh_gen_retry#46dc1fb9 nonce:int128 server_nonce:int128 new_nonce_hash2:int128 = Set_client_DH_params_answer;
+dh_gen_fail#a69dae02 nonce:int128 server_nonce:int128 new_nonce_hash3:int128 = Set_client_DH_params_answer;
+new_nonce_hash1, new_nonce_hash2, and new_nonce_hash3 are obtained as the 128 lower-order bits of SHA1 of the byte string derived from the new_nonce string by adding a single byte with the value of 1, 2, or 3, and followed by another 8 bytes with auth_key_aux_hash. Different values are required to prevent an intruder from changing server response dh_gen_ok into dh_gen_retry.
+auth_key_aux_hash is the 64 higher-order bits of SHA1(auth_key). It must not be confused with auth_key_hash.
+In the other case, the client goes to Item 7) generating a new b. In the first case, the client and the server have negotiated auth_key, following which they forget all other temporary data, and the client creates another encrypted session using auth_key. At the same time, server_salt is initially set to substr(new_nonce, 0, 8) XOR substr(server_nonce, 0, 8). If required, the client stores the difference between server_time received in 5) and its local time, to be able always to have a good approximation of server time which is required to generate correct message identifiers.
+
+IMPORTANT: Apart from the conditions on the Diffie-Hellman prime dh_prime and generator g, both sides are to check that g, g_a and g_b are greater than 1 and less than dh_prime - 1. We recommend checking that g_a and g_b are between 2^{2048-64} and dh_prime - 2^{2048-64} as well.
+
+Error Handling (Lost Queries and Responses)
+If the client fails to receive any response to its query from the server within a certain time interval, it may simply re-send the query. If the server has already sent a response to this query (exactly the same request and not just similar: all the parameters during the repeat request must take on the same values) but it did not get to the client, the server will simply re-send the same response. The server remembers the response for up to 10 minutes after having received the query in 1). If the server has already forgotten the response or the requisite temporary data, the client will have to start from the beginning.
+
+The server may consider that if the client has already sent in the next query using the data from the previous server response to the specific client, the response is known to have been received by the client and may be forgotten by the server.
+
+) Related articles
+Perfect Forward Secrecy 
+Security guidelines for developers
+This article is about Perfect Forward Secrecy in cloud chats,
+
+To make this possible, the client generates a permanent authorization key using p_q_inner_data and a temporary key using p_q_inner_data_temp. (See Creating an Authorization Key for more info.) These 2 operations may be done in parallel using different connections. The client must save an expires_at unix timestamp expires_at = time + expires_in.
+
+Important: in order to achieve PFS, the client must never use the permanent auth_key_id directly. Every message that is sent to MTProto, must be encrypted by a temp_auth_key_id, that was bound to the perm_auth_key_id.
+
+An unbound temp_auth_key_id may only be used with the following methods:
+
+auth.bindTempAuthKey
+help.getConfig
+help.getNearestDc
+In order to bind a temporary authorization key to the permanent key the client creates a special binding message and executes the auth.bindTempAuthKey method using temp_auth_key. Once auth.bindTempAuthKey has been executed successfully, the client may continue using the API as usual; the client must also rewrite client info using initConnection after each binding. Each permanent key may only be bound to one temporary key at a time, binding a new temporary key overwrites the previous one.
+
+An auth.bindTempAuthKey request may also return an ENCRYPTED_MESSAGE_INVALID error, which must be handled as follows:
+
+If and only if the permanent auth key used in the request was created more than 60 seconds ago:
+Drop both the temporary and permanent auth keys.
+If the dropped main auth key is the main logged in auth key (the one used for logging into the user's native DC), this means the user was also logged out.
+Recreate temporary and permanent auth keys.
+Unconditionally, retry binding the temporary and permanent keys.
+Once the temporary key expires, the client needs to generate a new temporary key using p_q_inner_data_temp. Then it needs to re-bind that new temporary key to the initial permanent key. A new key can also be generated in advance, so that the client has a new key ready by the time the old one has expired.
+
+For additional security, the client can store the temporary authorization key in RAM only and never save it in persistent storage.
+
+A temporary authorization key may expire at any moment before expires_at, since such keys are also stored only in the RAM on the server-side. Be prepared to handle resulting MTProto errors correctly (non-existent auth_key_id results in a 404 error).
+
+During the creation of the authorization key, the client obtains its server salt (to be used with the new key for all communication in the near future). The client then creates an encrypted session using the newly generated key, and subsequent communication occurs within that session (including the transmission of the user's registration information and phone number validation) unless the client creates a new session. The client is free to create new or additional sessions at any time by choosing a new random session_id.  How to implement RSA-2048 (your own version)
+1. Generate two large prime numbers 
+𝑝
+p and 
+𝑞
+q, each about 1024 bits long
+Use a probabilistic primality test like Miller-Rabin to check primality.
+
+Randomly generate 1024-bit numbers and test them until you find two primes.
+
+2. Compute the modulus 
+𝑛
+=
+𝑝
+×
+𝑞
+n=p×q
+𝑛
+n is part of both the public and private keys.
+
+3. Compute Euler’s totient function:
+𝜑
+(
+𝑛
+)
+=
+(
+𝑝
+−
+1
+)
+(
+𝑞
+−
+1
+)
+φ(n)=(p−1)(q−1)
+4. Choose the public exponent 
+𝑒
+e
+Common choice: 
+𝑒
+=
+65537
+e=65537 (fast and secure).
+
+5. Calculate the private exponent 
+𝑑
+d, the modular inverse of 
+𝑒
+e modulo 
+𝜑
+(
+𝑛
+)
+φ(n):
+𝑑
+×
+𝑒
+≡
+1
+m
+o
+d
+ 
+ 
+𝜑
+(
+𝑛
+)
+d×e≡1modφ(n)
+Use the Extended Euclidean Algorithm to find 
+𝑑
+d.
+
+6. Your keys are:
+Public key = 
+(
+𝑒
+,
+𝑛
+)
+(e,n)
+
+Private key = 
+(
+𝑑
+,
+𝑛
+)
+(d,n)
+
+7. To encrypt a message 
+𝑚
+m (where 
+𝑚
+<
+𝑛
+m<n):
+𝑐
+=
+𝑚
+𝑒
+m
+o
+d
+ 
+ 
+𝑛
+c=m 
+e
+ modn
+8. To decrypt the ciphertext 
+𝑐
+c:
+𝑚
+=
+𝑐
+𝑑
+m
+o
+d
+ 
+ 
+𝑛
+m=c 
+d
+ modn
+Additional recommendations for a practical, secure implementation
+Padding scheme: Don’t encrypt raw messages directly with RSA. Use padding like PKCS#1 v1.5 or OAEP to prevent attacks.
+
+Message size: Your message 
+𝑚
+m must be smaller than 
+𝑛
+n.
+
+Hashing for signatures: When implementing signatures (like Telegram does), hash the message first (e.g., SHA-256) before signing.
+
+Big integers: Python supports arbitrarily large integers, so no special library needed.
+
+Primality testing: Miller-Rabin is fast and widely used for RSA key gen.
+
+Randomness: Use a secure random number generator (e.g., os.urandom or secrets in Python).
+
+Performance: Generating 2048-bit primes can be slow — optimize by caching or parallelizing primality tests. add the chat app will be in GUI use PySide6 Note i want onyl 2 files sevrer.py and client.py (chat app with the protocol) so no a third file note do it 1 by 1 so it mean first create teh server after create teh cleitn ntoe the sevrer contain: Secret Chats are end-to-end encrypted, meaning encryption and decryption happen only on the clients’ devices.
+
+The server never has access to the plaintext messages or encryption keys.
+
+The server’s role is only to relay encrypted messages between clients.
+
+2. What the Server Has and Does
+The server does NOT have the encryption keys.
+
+It stores or forwards only encrypted data, never plaintext.
+
+The server does NOT participate in key generation for secret chats.
+
+It does NOT perform encryption or decryption.
+
+Its role is to deliver encrypted messages between users.
+
+For regular (non-secret) chats, the server stores messages (encrypted or not), but for secret chats, it doesn’t store messages.
+
+3. What the Client Has and Does
+The client generates key pairs and performs the key exchange protocol (a variant of Diffie-Hellman in MTProto).
+
+The client performs all encryption and decryption locally.
+
+Clients store encryption keys securely on the device.
+
+Secret Chats implement Perfect Forward Secrecy — keys are rotated so compromising one key doesn’t compromise past messages.
+
+Uses AES-256 encryption in IGE mode and SHA-256 for integrity/authentication.
+
+Messages are authenticated with HMAC.
+
+Clients verify each other’s identity via key fingerprints or QR codes to prevent MITM attacks.
+
+4. Key Exchange and Security
+Uses Diffie-Hellman key exchange (Curve25519) to establish a shared secret key.
+
+The server only forwards the key exchange messages but does not learn the keys.
+
+After the exchange, the shared secret key is used to symmetrically encrypt all messages.
+
+5. Summary: What the Server Does NOT Have but the Client Does
+The server does NOT have private keys or session keys for Secret Chats.
+
+The server cannot read or modify Secret Chat messages.
+
+The client has all encryption keys and handles all cryptographic operations.
